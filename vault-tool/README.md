@@ -1,6 +1,7 @@
 # vault-tool
 
-Client library for HashiCorp's Vault tool (via HTTP API)
+Client library for HashiCorp's [Vault](https://www.vaultproject.io) tool (via
+HTTP API)
 
 Tested with Vault versions:
 
