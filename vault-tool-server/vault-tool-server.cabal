@@ -1,5 +1,5 @@
 name:                vault-tool-server
-version:             0.0.0.1
+version:             0.0.0.2
 synopsis:            Utility library for spawning a HashiCorp Vault process
 description:         Utility library for spawning a HashiCorp Vault process
 license:             MIT
