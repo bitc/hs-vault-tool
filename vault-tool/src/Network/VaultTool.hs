@@ -70,7 +70,9 @@ data VaultConnection = VaultConnection
 --
 -- See 'vaultHealth'
 data VaultHealth = VaultHealth
-    { _VaultHealth_Initialized :: Bool
+    { _VaultHealth_Version :: Text
+    , _VaultHealth_ServerTimeUtc :: Int
+    , _VaultHealth_Initialized :: Bool
     , _VaultHealth_Sealed :: Bool
     , _VaultHealth_Standby :: Bool
     }
@@ -79,6 +81,8 @@ data VaultHealth = VaultHealth
 instance FromJSON VaultHealth where
     parseJSON (Object v) =
         VaultHealth <$>
+             v .: "version" <*>
+             v .: "server_time_utc" <*>
              v .: "initialized" <*>
              v .: "sealed" <*>
              v .: "standby"
@@ -93,7 +97,7 @@ vaultHealth vaultAddress = do
     manager <- newManager tlsManagerSettings
     vaultRequestJSON manager "GET" (vaultUrl vaultAddress "/sys/health") [] (Nothing :: Maybe ()) expectedStatusCodes
     where
-    expectedStatusCodes = [200, 429, 500, 501, 503]
+    expectedStatusCodes = [200, 429, 501, 503]
 
 -- | Just initializes the 'VaultConnection' objects, does not actually make any
 -- contact with the vault server. (That is also the explanation why there is no

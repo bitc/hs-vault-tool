@@ -21,7 +21,7 @@ source-repository head
 library
   exposed-modules:     Network.VaultTool.VaultServerProcess
 
-  build-depends:       base >=4.8 && <4.10,
+  build-depends:       base >=4.8 && <4.11,
                        vault-tool,
                        aeson,
                        async,
@@ -41,7 +41,7 @@ test-suite test
   hs-source-dirs:      test
   main-is:             test.hs
 
-  build-depends:       base >=4.8 && <4.10,
+  build-depends:       base >=4.8 && <4.11,
                        vault-tool,
                        vault-tool-server,
                        aeson,

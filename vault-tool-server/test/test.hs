@@ -90,7 +90,7 @@ talkToVault addr = do
     allMounts <- vaultMounts conn
 
     fmap _VaultMount_Type (lookup "cubbyhole/" allMounts) @?= Just "cubbyhole"
-    fmap _VaultMount_Type (lookup "secret/" allMounts) @?= Just "generic"
+    fmap _VaultMount_Type (lookup "secret/" allMounts) @?= Just "kv"
     fmap _VaultMount_Type (lookup "sys/" allMounts) @?= Just "system"
 
     _ <- vaultMountTune conn "cubbyhole"
