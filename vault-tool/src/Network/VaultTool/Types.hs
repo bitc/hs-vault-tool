@@ -24,6 +24,12 @@ instance FromJSON VaultAuthToken where
 newtype VaultSecretPath = VaultSecretPath { unVaultSecretPath :: Text }
     deriving (Show, Eq, Ord)
 
+newtype VaultAppRoleId = VaultAppRoleId { unVaultAppRoleId :: ByteString }
+    deriving (Show, Eq, Ord)
+
+newtype VaultAppRoleSecretId = VaultAppRoleSecretId { unVaultAppRoleSecretId :: ByteString }
+    deriving (Show, Eq, Ord)
+
 data VaultException
     = VaultException
     | VaultException_InvalidAddress ByteString String

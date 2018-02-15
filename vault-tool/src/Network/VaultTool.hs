@@ -9,6 +9,8 @@ module Network.VaultTool
     ( VaultAddress(..)
     , VaultUnsealKey(..)
     , VaultAuthToken(..)
+    , VaultAppRoleId(..)
+    , VaultAppRoleSecretId(..)
     , VaultException(..)
 
     , VaultHealth(..)
@@ -16,6 +18,8 @@ module Network.VaultTool
 
     , VaultConnection
     , connectToVault
+
+    , connectToVaultAppRole
 
     , vaultInit
     , VaultSealStatus(..)
@@ -56,6 +60,7 @@ import Network.HTTP.Client (Manager, newManager)
 import Network.HTTP.Client.TLS (tlsManagerSettings)
 import qualified Data.HashMap.Strict as H
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as TE
 
 import Network.VaultTool.Internal
 import Network.VaultTool.Types
@@ -110,6 +115,14 @@ connectToVault addr authToken = do
             , _VaultConnection_VaultAddress = addr
             , _VaultConnection_Manager = manager
             }
+
+-- | Initializes the 'VaultConnection' objects using approle credentials to retrieve an authtoken,
+-- and then calls `connectToVault`
+connectToVaultAppRole :: VaultAddress -> VaultAppRoleId -> VaultAppRoleSecretId -> IO VaultConnection
+connectToVaultAppRole addr roleId secretId = do
+    manager <- newManager tlsManagerSettings
+    authToken <- vaultAppRoleLogin addr manager roleId secretId
+    connectToVault addr authToken
 
 -- | <https://www.vaultproject.io/docs/http/sys-init.html>
 --
@@ -171,6 +184,55 @@ vaultSealStatus addr = do
     manager <- newManager tlsManagerSettings
     vaultRequestJSON manager "GET" (vaultUrl addr "/sys/seal-status") [] (Nothing :: Maybe ()) [200]
 
+-- | <https://www.vaultproject.io/api/auth/approle/index.html>
+--
+-- See 'sample-response-7'
+data VaultAuth = VaultAuth
+    { _VaultAuth_Renewable :: Bool
+    , _VaultAuth_LeaseDuration :: Int
+    , _VaultAuth_Policies :: [Text]
+    , _VaultAuth_ClientToken :: VaultAuthToken
+    }
+    deriving (Show, Eq, Ord)
+
+instance FromJSON VaultAuth where
+    parseJSON (Object v) =
+        VaultAuth <$>
+            v .: "renewable" <*>
+            v .: "lease_duration" <*>
+            v .: "policies" <*>
+            v .: "client_token"
+    parseJSON _ = fail "Not an Object"
+
+-- | <https://www.vaultproject.io/api/auth/approle/index.html>
+--
+-- See 'sample-response-7'
+data VaultAppRoleAuthResponse = VaultAppRoleAuthResponse
+    { _VaultAppRoleAuthResponse_Auth :: VaultAuth
+    , _VaultAppRoleAuthResponse_LeaseDuration :: Int
+    , _VaultAppRoleAuthResponse_Renewable :: Bool
+    }
+    deriving (Show, Eq, Ord)
+
+instance FromJSON VaultAppRoleAuthResponse where
+    parseJSON (Object v) =
+        VaultAppRoleAuthResponse <$>
+            v .: "auth" <*>
+            v .: "lease_duration" <*>
+            v .: "renewable"
+    parseJSON _ = fail "Not an Object"
+
+-- | <https://www.vaultproject.io/docs/auth/approle.html>
+vaultAppRoleLogin :: VaultAddress -> Manager -> VaultAppRoleId -> VaultAppRoleSecretId -> IO VaultAuthToken
+vaultAppRoleLogin addr manager roleId secretId = do
+    response <- vaultRequestJSON manager "POST" (vaultUrl addr "/auth/approle/login") [] (Just reqBody) [200]
+    return . _VaultAuth_ClientToken $ _VaultAppRoleAuthResponse_Auth response
+  where
+    reqBody = object
+        [ "role_id" .= TE.decodeUtf8 (unVaultAppRoleId roleId),
+          "secret_id" .= TE.decodeUtf8 (unVaultAppRoleSecretId secretId)
+        ]
+
 vaultSeal :: VaultConnection -> IO ()
 vaultSeal VaultConnection{_VaultConnection_VaultAddress, _VaultConnection_Manager, _VaultConnection_AuthToken} = do
     _ <- vaultRequest _VaultConnection_Manager "PUT" (vaultUrl _VaultConnection_VaultAddress "/sys/seal") headers (Nothing :: Maybe ()) [204]
@@ -198,7 +260,6 @@ vaultUnseal addr unseal = do
                 ]
     manager <- newManager tlsManagerSettings
     vaultRequestJSON manager "PUT" (vaultUrl addr "/sys/unseal") [] (Just reqBody) [200]
-
 
 type VaultMountRead = VaultMount Text VaultMountConfigRead
 type VaultMountWrite = VaultMount (Maybe Text) (Maybe VaultMountConfigWrite)
