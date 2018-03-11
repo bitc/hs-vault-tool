@@ -25,6 +25,8 @@ withTempVaultBackend action = withSystemTempDirectory "hs_vault" $ \tmpDir -> do
 
 main :: IO ()
 main = withTempVaultBackend $ \vaultBackendConfig -> do
+    putStrLn "Running tests..."
+
     vaultExe <- lookupEnv "VAULT_EXE"
 
     let cfg = vaultConfigDefaultAddress vaultBackendConfig
@@ -32,6 +34,8 @@ main = withTempVaultBackend $ \vaultBackendConfig -> do
     withVaultConfigFile cfg $ \vaultConfigFile ->
         withVaultServerProcess vaultExe vaultConfigFile addr $
             talkToVault addr
+
+    putStrLn "Ok"
 
 -- | The vault must be a newly created, non-initialized vault
 --
