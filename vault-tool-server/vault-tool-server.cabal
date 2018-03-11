@@ -1,5 +1,5 @@
 name:                vault-tool-server
-version:             0.0.0.3
+version:             0.0.0.4
 synopsis:            Utility library for spawning a HashiCorp Vault process
 description:         Utility library for spawning a HashiCorp Vault process
 license:             MIT
@@ -22,7 +22,7 @@ library
   exposed-modules:     Network.VaultTool.VaultServerProcess
 
   build-depends:       base >=4.8 && <4.11,
-                       vault-tool,
+                       vault-tool >=0.0.0.4,
                        aeson,
                        async,
                        bytestring,
@@ -42,7 +42,7 @@ test-suite test
   main-is:             test.hs
 
   build-depends:       base >=4.8 && <4.11,
-                       vault-tool,
+                       vault-tool >=0.0.0.4,
                        vault-tool-server,
                        aeson,
                        tasty-hunit,
