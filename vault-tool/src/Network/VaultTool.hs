@@ -71,8 +71,10 @@ import Data.Text (Text)
 import Data.Maybe (catMaybes)
 import Network.HTTP.Client (Manager, newManager)
 import Network.HTTP.Client.TLS (tlsManagerSettings)
+import Network.HTTP.Types.Header (Header)
 import qualified Data.HashMap.Strict as H
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 
 import Network.VaultTool.Internal
 import Network.VaultTool.Types
@@ -242,6 +244,9 @@ instance FromJSON VaultAppRoleResponse where
             v .: "lease_id"
     parseJSON _ = fail "Not an Object"
 
+authTokenHeader :: VaultAuthToken -> Header
+authTokenHeader (VaultAuthToken token) = ("X-Vault-Token", T.encodeUtf8 token)
+
 -- | <https://www.vaultproject.io/docs/auth/approle.html>
 vaultAppRoleLogin :: VaultAddress -> Manager -> VaultAppRoleId -> VaultAppRoleSecretId -> IO VaultAuthToken
 vaultAppRoleLogin addr manager roleId secretId = do
@@ -261,7 +266,7 @@ vaultAuthEnable VaultConnection{_VaultConnection_VaultAddress, _VaultConnection_
     pure ()
   where
   reqBody = object [ "type" .= authMethod ]
-  headers = [("X-Vault-Token", unVaultAuthToken _VaultConnection_AuthToken)]
+  headers = [authTokenHeader _VaultConnection_AuthToken]
 
 -- | <https://www.vaultproject.io/api/system/policies.html#create-update-acl-policy>
 vaultPolicyCreate :: VaultConnection -> Text -> Text -> IO ()
@@ -270,7 +275,7 @@ vaultPolicyCreate VaultConnection{_VaultConnection_VaultAddress, _VaultConnectio
     pure ()
     where
     reqBody = object [ "policy" .= policy ]
-    headers = [("X-Vault-Token", unVaultAuthToken _VaultConnection_AuthToken)]
+    headers = [authTokenHeader _VaultConnection_AuthToken]
 
 data VaultAppRoleListResponse = VaultAppRoleListResponse
     { _VaultAppRoleListResponse_AppRoles :: [Text] }
@@ -333,7 +338,7 @@ vaultAppRoleCreate VaultConnection{_VaultConnection_VaultAddress, _VaultConnecti
     _ <- vaultRequest _VaultConnection_Manager "POST" (vaultUrl _VaultConnection_VaultAddress "/auth/approle/role/" ++ T.unpack appRoleName) headers (Just varp) [204]
     pure ()
     where
-    headers = [("X-Vault-Token", unVaultAuthToken _VaultConnection_AuthToken)]
+    headers = [authTokenHeader _VaultConnection_AuthToken]
 
 -- | <https://www.vaultproject.io/api/auth/approle/index.html#read-approle-role-id>
 vaultAppRoleRoleIdRead :: VaultConnection -> Text -> IO VaultAppRoleId
@@ -344,7 +349,7 @@ vaultAppRoleRoleIdRead VaultConnection{_VaultConnection_VaultAddress, _VaultConn
       Left err -> throwIO $ VaultException_ParseBodyError "GET" ("/auth/approle/role/" ++ T.unpack appRoleName ++ "/role-id") (encode d) err
       Right obj -> return obj
     where
-    headers = [("X-Vault-Token", unVaultAuthToken _VaultConnection_AuthToken)]
+    headers = [authTokenHeader _VaultConnection_AuthToken]
 
 data VaultAppRoleSecretIdGenerateResponse = VaultAppRoleSecretIdGenerateResponse
     { _VaultAppRoleSecretIdGenerateResponse_SecretIdAccessor :: VaultAppRoleSecretIdAccessor
@@ -368,14 +373,14 @@ vaultAppRoleSecretIdGenerate VaultConnection{_VaultConnection_VaultAddress, _Vau
       Right obj -> return obj
     where
     reqBody = object[ "metadata" .= metadata ]
-    headers = [("X-Vault-Token", unVaultAuthToken _VaultConnection_AuthToken)]
+    headers = [authTokenHeader _VaultConnection_AuthToken]
 
 vaultSeal :: VaultConnection -> IO ()
 vaultSeal VaultConnection{_VaultConnection_VaultAddress, _VaultConnection_Manager, _VaultConnection_AuthToken} = do
     _ <- vaultRequest _VaultConnection_Manager "PUT" (vaultUrl _VaultConnection_VaultAddress "/sys/seal") headers (Nothing :: Maybe ()) [204]
     pure ()
     where
-    headers = [("X-Vault-Token", unVaultAuthToken _VaultConnection_AuthToken)]
+    headers = [authTokenHeader _VaultConnection_AuthToken]
 
 -- | <https://www.vaultproject.io/docs/http/sys-unseal.html>
 --
@@ -469,14 +474,14 @@ vaultMounts VaultConnection{_VaultConnection_VaultAddress, _VaultConnection_Mana
         Left err -> throwIO $ VaultException_ParseBodyError "GET" reqPath (encode rspObj) err
         Right obj -> pure $ sortOn fst (H.toList obj)
     where
-    headers = [("X-Vault-Token", unVaultAuthToken _VaultConnection_AuthToken)]
+    headers = [authTokenHeader _VaultConnection_AuthToken]
 
 -- | <https://www.vaultproject.io/docs/http/sys-mounts.html>
 vaultMountTune :: VaultConnection -> Text -> IO VaultMountConfigRead
 vaultMountTune VaultConnection{_VaultConnection_VaultAddress, _VaultConnection_Manager, _VaultConnection_AuthToken} mountPoint = do
     vaultRequestJSON _VaultConnection_Manager "GET" (vaultUrl _VaultConnection_VaultAddress "/sys/mounts/" ++ T.unpack mountPoint ++ "/tune") headers (Nothing :: Maybe ()) [200]
     where
-    headers = [("X-Vault-Token", unVaultAuthToken _VaultConnection_AuthToken)]
+    headers = [authTokenHeader _VaultConnection_AuthToken]
 
 -- | <https://www.vaultproject.io/docs/http/sys-mounts.html>
 vaultMountSetTune :: VaultConnection -> Text -> VaultMountConfigWrite -> IO ()
@@ -485,7 +490,7 @@ vaultMountSetTune VaultConnection{_VaultConnection_VaultAddress, _VaultConnectio
     _ <- vaultRequest _VaultConnection_Manager "POST" (vaultUrl _VaultConnection_VaultAddress "/sys/mounts/" ++ T.unpack mountPoint ++ "/tune") headers (Just reqBody) [204]
     pure ()
     where
-    headers = [("X-Vault-Token", unVaultAuthToken _VaultConnection_AuthToken)]
+    headers = [authTokenHeader _VaultConnection_AuthToken]
 
 -- | <https://www.vaultproject.io/docs/http/sys-mounts.html>
 vaultNewMount :: VaultConnection -> Text -> VaultMountWrite -> IO ()
@@ -494,7 +499,7 @@ vaultNewMount VaultConnection{_VaultConnection_VaultAddress, _VaultConnection_Ma
     _ <- vaultRequest _VaultConnection_Manager "POST" (vaultUrl _VaultConnection_VaultAddress "/sys/mounts/" ++ T.unpack mountPoint) headers (Just reqBody) [204]
     pure ()
     where
-    headers = [("X-Vault-Token", unVaultAuthToken _VaultConnection_AuthToken)]
+    headers = [authTokenHeader _VaultConnection_AuthToken]
 
 -- | <https://www.vaultproject.io/docs/http/sys-mounts.html>
 vaultUnmount :: VaultConnection -> Text -> IO ()
@@ -502,7 +507,7 @@ vaultUnmount VaultConnection{_VaultConnection_VaultAddress, _VaultConnection_Man
     _ <- vaultRequest _VaultConnection_Manager "DELETE" (vaultUrl _VaultConnection_VaultAddress "/sys/mounts/" ++ T.unpack mountPoint) headers (Nothing :: Maybe ()) [204]
     pure ()
     where
-    headers = [("X-Vault-Token", unVaultAuthToken _VaultConnection_AuthToken)]
+    headers = [authTokenHeader _VaultConnection_AuthToken]
 
 data VaultSecretMetadata = VaultSecretMetadata
     { _VaultSecretMetadata_leaseDuration :: Int
@@ -528,7 +533,7 @@ vaultWrite VaultConnection{_VaultConnection_VaultAddress, _VaultConnection_Manag
     _ <- vaultRequest _VaultConnection_Manager "POST" (vaultUrl _VaultConnection_VaultAddress "/" ++ T.unpack location) headers (Just reqBody) [204]
     pure ()
     where
-    headers = [("X-Vault-Token", unVaultAuthToken _VaultConnection_AuthToken)]
+    headers = [authTokenHeader _VaultConnection_AuthToken]
 
 vaultRead
     :: FromJSON a
@@ -561,7 +566,7 @@ vaultRead VaultConnection{_VaultConnection_VaultAddress, _VaultConnection_Manage
                 Right data_ -> pure (metadata, Right data_)
 
     where
-    headers = [("X-Vault-Token", unVaultAuthToken _VaultConnection_AuthToken)]
+    headers = [authTokenHeader _VaultConnection_AuthToken]
 
 -- | <https://www.vaultproject.io/docs/secrets/generic/index.html>
 vaultDelete :: VaultConnection -> VaultSecretPath -> IO ()
@@ -569,7 +574,7 @@ vaultDelete VaultConnection{_VaultConnection_VaultAddress, _VaultConnection_Mana
     _ <- vaultRequest _VaultConnection_Manager "DELETE" (vaultUrl _VaultConnection_VaultAddress "/" ++ T.unpack location) headers (Nothing :: Maybe ()) [204]
     pure ()
     where
-    headers = [("X-Vault-Token", unVaultAuthToken _VaultConnection_AuthToken)]
+    headers = [authTokenHeader _VaultConnection_AuthToken]
 
 data VaultListResult = VaultListResult [Text]
 
@@ -597,7 +602,7 @@ vaultList VaultConnection{_VaultConnection_VaultAddress, _VaultConnection_Manage
     VaultListResult keys <- vaultRequestJSON _VaultConnection_Manager "LIST" (vaultUrl _VaultConnection_VaultAddress "/" ++ T.unpack location) headers (Nothing :: Maybe ()) [200]
     pure $ map (VaultSecretPath . (withTrailingSlash `T.append`)) keys
     where
-    headers = [("X-Vault-Token", unVaultAuthToken _VaultConnection_AuthToken)]
+    headers = [authTokenHeader _VaultConnection_AuthToken]
     withTrailingSlash
         | T.null location = "/"
         | T.last location == '/' = location
