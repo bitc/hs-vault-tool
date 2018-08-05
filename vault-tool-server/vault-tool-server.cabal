@@ -21,7 +21,7 @@ source-repository head
 library
   exposed-modules:     Network.VaultTool.VaultServerProcess
 
-  build-depends:       base >=4.8 && <4.11,
+  build-depends:       base >=4.8 && < 5,
                        vault-tool >=0.1.0.0,
                        aeson,
                        async,
