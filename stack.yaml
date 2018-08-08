@@ -1,0 +1,6 @@
+resolver: lts-12.2
+flags: {}
+packages:
+  - vault-tool
+  - vault-tool-server
+extra-deps: []
