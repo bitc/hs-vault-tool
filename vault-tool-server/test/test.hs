@@ -25,6 +25,8 @@ withTempVaultBackend action = withSystemTempDirectory "hs_vault" $ \tmpDir -> do
 
 main :: IO ()
 main = withTempVaultBackend $ \vaultBackendConfig -> do
+    putStrLn "Running tests..."
+
     vaultExe <- lookupEnv "VAULT_EXE"
 
     let cfg = vaultConfigDefaultAddress vaultBackendConfig
@@ -32,6 +34,8 @@ main = withTempVaultBackend $ \vaultBackendConfig -> do
     withVaultConfigFile cfg $ \vaultConfigFile ->
         withVaultServerProcess vaultExe vaultConfigFile addr $
             talkToVault addr
+
+    putStrLn "Ok"
 
 -- | The vault must be a newly created, non-initialized vault
 --
@@ -162,6 +166,22 @@ talkToVault addr = do
         , VaultSecretPath "secret/foo/bar/a/b/c/d/e/f/g"
         , VaultSecretPath "secret/foo/quack/duck"
         ]
+
+    vaultAuthEnable conn "approle"
+
+    vaultWrite conn (VaultSecretPath "secret/small") (object ["X" .= 'x'])
+
+    vaultPolicyCreate conn "foo" "path \"secret/small\" { capabilities = [\"read\"] }"
+    vaultAppRoleCreate conn "foo-role" defaultVaultAppRoleParameters{_VaultAppRoleParameters_Policies=["foo"]}
+
+    roleId <- vaultAppRoleRoleIdRead conn "foo-role"
+    secretId <- _VaultAppRoleSecretIdGenerateResponse_SecretId <$> vaultAppRoleSecretIdGenerate conn "foo-role" ""
+
+    arConn <- connectToVaultAppRole addr roleId secretId
+    (_, ar1) <- vaultRead conn (VaultSecretPath "secret/small")
+    case ar1 of
+      Left (v, _) -> v @?= object ["X" .= 'x']
+      Right (x :: FunStuff) -> assertFailure $ "Somehow parsed an impossible value" ++ show x
 
     vaultSeal conn
 
