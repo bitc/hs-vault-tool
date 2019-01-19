@@ -51,6 +51,8 @@ module Network.VaultTool
     , vaultNewMount
     , vaultUnmount
 
+    , VaultMountedPath(..)
+    , VaultSearchPath(..)
     , VaultSecretPath(..)
     , VaultSecretMetadata(..)
     , vaultWrite
@@ -78,6 +80,32 @@ import qualified Data.Text.Encoding as T
 
 import Network.VaultTool.Internal
 import Network.VaultTool.Types
+
+data VaultAction
+    = Create
+    | ReadVersion
+    | ReadMetadata
+    | Update
+    | UpdateMetadata
+    | ListSecrets
+    | DeleteLast
+    | DeleteVersions
+    | Undelete
+    | Destroy
+    | DeleteMetadata
+
+vaultUrlPrefix :: VaultAction -> String
+vaultUrlPrefix Create         = "/data"
+vaultUrlPrefix ReadVersion    = "/data"
+vaultUrlPrefix Update         = "/data"
+vaultUrlPrefix DeleteLast     = "/data"
+vaultUrlPrefix DeleteVersions = "/delete"
+vaultUrlPrefix Undelete       = "/undelete"
+vaultUrlPrefix Destroy        = "/destroy"
+vaultUrlPrefix ListSecrets    = "/metadata"
+vaultUrlPrefix ReadMetadata   = "/metadata"
+vaultUrlPrefix UpdateMetadata = "/metadata"
+vaultUrlPrefix DeleteMetadata = "/metadata"
 
 data VaultConnection = VaultConnection
     { _VaultConnection_AuthToken :: VaultAuthToken
@@ -109,6 +137,10 @@ instance FromJSON VaultHealth where
 
 vaultUrl :: VaultAddress -> String -> String
 vaultUrl (VaultAddress addr) path = T.unpack addr ++ "/v1" ++ path
+
+vaultActionUrl :: VaultAction -> VaultAddress -> VaultMountedPath -> VaultSearchPath -> String
+vaultActionUrl action (VaultAddress addr) (VaultMountedPath mountedPath) (VaultSearchPath searchPath) =
+    T.unpack addr ++ "/v1/"  ++ T.unpack mountedPath ++ (vaultUrlPrefix action) ++ "/" ++ T.unpack searchPath
 
 -- | https://www.vaultproject.io/docs/http/sys-health.html
 vaultHealth :: VaultAddress -> IO VaultHealth
@@ -262,7 +294,7 @@ vaultAppRoleLogin addr manager roleId secretId = do
 -- | <https://www.vaultproject.io/docs/auth/approle.html#via-the-api-1>
 vaultAuthEnable :: VaultConnection -> Text -> IO ()
 vaultAuthEnable VaultConnection{_VaultConnection_VaultAddress, _VaultConnection_Manager, _VaultConnection_AuthToken} authMethod = do
-    _ <- vaultRequest _VaultConnection_Manager "POST" (vaultUrl _VaultConnection_VaultAddress "/sys/auth/" ++ T.unpack authMethod) headers (Just reqBody) [204]
+    _ <- vaultRequest _VaultConnection_Manager "POST" (vaultUrl _VaultConnection_VaultAddress "/sys/auth/" ++ T.unpack authMethod) headers (Just reqBody) [200]
     pure ()
   where
   reqBody = object [ "type" .= authMethod ]
@@ -271,7 +303,7 @@ vaultAuthEnable VaultConnection{_VaultConnection_VaultAddress, _VaultConnection_
 -- | <https://www.vaultproject.io/api/system/policies.html#create-update-acl-policy>
 vaultPolicyCreate :: VaultConnection -> Text -> Text -> IO ()
 vaultPolicyCreate VaultConnection{_VaultConnection_VaultAddress, _VaultConnection_Manager, _VaultConnection_AuthToken} policyName policy = do
-    _ <- vaultRequest _VaultConnection_Manager "PUT" (vaultUrl _VaultConnection_VaultAddress "/sys/policies/acl/" ++ T.unpack policyName) headers (Just reqBody) [204]
+    _ <- vaultRequest _VaultConnection_Manager "PUT" (vaultUrl _VaultConnection_VaultAddress "/sys/policies/acl/" ++ T.unpack policyName) headers (Just reqBody) [200]
     pure ()
     where
     reqBody = object [ "policy" .= policy ]
@@ -335,7 +367,7 @@ defaultVaultAppRoleParameters = VaultAppRoleParameters True [] Nothing Nothing N
 -- | <https://www.vaultproject.io/api/auth/approle/index.html#create-new-approle>
 vaultAppRoleCreate :: VaultConnection -> Text -> VaultAppRoleParameters -> IO ()
 vaultAppRoleCreate VaultConnection{_VaultConnection_VaultAddress, _VaultConnection_Manager, _VaultConnection_AuthToken} appRoleName varp = do
-    _ <- vaultRequest _VaultConnection_Manager "POST" (vaultUrl _VaultConnection_VaultAddress "/auth/approle/role/" ++ T.unpack appRoleName) headers (Just varp) [204]
+    _ <- vaultRequest _VaultConnection_Manager "POST" (vaultUrl _VaultConnection_VaultAddress "/auth/approle/role/" ++ T.unpack appRoleName) headers (Just varp) [200]
     pure ()
     where
     headers = [authTokenHeader _VaultConnection_AuthToken]
@@ -377,7 +409,7 @@ vaultAppRoleSecretIdGenerate VaultConnection{_VaultConnection_VaultAddress, _Vau
 
 vaultSeal :: VaultConnection -> IO ()
 vaultSeal VaultConnection{_VaultConnection_VaultAddress, _VaultConnection_Manager, _VaultConnection_AuthToken} = do
-    _ <- vaultRequest _VaultConnection_Manager "PUT" (vaultUrl _VaultConnection_VaultAddress "/sys/seal") headers (Nothing :: Maybe ()) [204]
+    _ <- vaultRequest _VaultConnection_Manager "PUT" (vaultUrl _VaultConnection_VaultAddress "/sys/seal") headers (Nothing :: Maybe ()) [200]
     pure ()
     where
     headers = [authTokenHeader _VaultConnection_AuthToken]
@@ -487,7 +519,7 @@ vaultMountTune VaultConnection{_VaultConnection_VaultAddress, _VaultConnection_M
 vaultMountSetTune :: VaultConnection -> Text -> VaultMountConfigWrite -> IO ()
 vaultMountSetTune VaultConnection{_VaultConnection_VaultAddress, _VaultConnection_Manager, _VaultConnection_AuthToken} mountPoint mountConfig = do
     let reqBody = mountConfig
-    _ <- vaultRequest _VaultConnection_Manager "POST" (vaultUrl _VaultConnection_VaultAddress "/sys/mounts/" ++ T.unpack mountPoint ++ "/tune") headers (Just reqBody) [204]
+    _ <- vaultRequest _VaultConnection_Manager "POST" (vaultUrl _VaultConnection_VaultAddress "/sys/mounts/" ++ T.unpack mountPoint ++ "/tune") headers (Just reqBody) [200]
     pure ()
     where
     headers = [authTokenHeader _VaultConnection_AuthToken]
@@ -496,7 +528,7 @@ vaultMountSetTune VaultConnection{_VaultConnection_VaultAddress, _VaultConnectio
 vaultNewMount :: VaultConnection -> Text -> VaultMountWrite -> IO ()
 vaultNewMount VaultConnection{_VaultConnection_VaultAddress, _VaultConnection_Manager, _VaultConnection_AuthToken} mountPoint vaultMount = do
     let reqBody = vaultMount
-    _ <- vaultRequest _VaultConnection_Manager "POST" (vaultUrl _VaultConnection_VaultAddress "/sys/mounts/" ++ T.unpack mountPoint) headers (Just reqBody) [204]
+    _ <- vaultRequest _VaultConnection_Manager "POST" (vaultUrl _VaultConnection_VaultAddress "/sys/mounts/" ++ T.unpack mountPoint) headers (Just reqBody) [200]
     pure ()
     where
     headers = [authTokenHeader _VaultConnection_AuthToken]
@@ -504,7 +536,7 @@ vaultNewMount VaultConnection{_VaultConnection_VaultAddress, _VaultConnection_Ma
 -- | <https://www.vaultproject.io/docs/http/sys-mounts.html>
 vaultUnmount :: VaultConnection -> Text -> IO ()
 vaultUnmount VaultConnection{_VaultConnection_VaultAddress, _VaultConnection_Manager, _VaultConnection_AuthToken} mountPoint = do
-    _ <- vaultRequest _VaultConnection_Manager "DELETE" (vaultUrl _VaultConnection_VaultAddress "/sys/mounts/" ++ T.unpack mountPoint) headers (Nothing :: Maybe ()) [204]
+    _ <- vaultRequest _VaultConnection_Manager "DELETE" (vaultUrl _VaultConnection_VaultAddress "/sys/mounts/" ++ T.unpack mountPoint) headers (Nothing :: Maybe ()) [200]
     pure ()
     where
     headers = [authTokenHeader _VaultConnection_AuthToken]
@@ -528,9 +560,10 @@ instance FromJSON VaultSecretMetadata where
 --
 -- The value that you give must encode as a JSON object
 vaultWrite :: ToJSON a => VaultConnection -> VaultSecretPath -> a -> IO ()
-vaultWrite VaultConnection{_VaultConnection_VaultAddress, _VaultConnection_Manager, _VaultConnection_AuthToken} (VaultSecretPath location) value = do
+vaultWrite VaultConnection{_VaultConnection_VaultAddress, _VaultConnection_Manager, _VaultConnection_AuthToken} (VaultSecretPath (mountedPath, searchPath)) value = do
     let reqBody = value
-    _ <- vaultRequest _VaultConnection_Manager "POST" (vaultUrl _VaultConnection_VaultAddress "/" ++ T.unpack location) headers (Just reqBody) [204]
+    let path = vaultActionUrl Create _VaultConnection_VaultAddress mountedPath searchPath
+    _ <- vaultRequest _VaultConnection_Manager "POST" path headers (Just reqBody) [200, 204]
     pure ()
     where
     headers = [authTokenHeader _VaultConnection_AuthToken]
@@ -554,8 +587,8 @@ vaultRead
                                                           -- the error message
                                                           -- from the parse
                                                           -- failure
-vaultRead VaultConnection{_VaultConnection_VaultAddress, _VaultConnection_Manager, _VaultConnection_AuthToken} (VaultSecretPath location) = do
-    let path = vaultUrl _VaultConnection_VaultAddress "/" ++ T.unpack location
+vaultRead VaultConnection{_VaultConnection_VaultAddress, _VaultConnection_Manager, _VaultConnection_AuthToken} (VaultSecretPath (mountedPath, searchPath)) = do
+    let path = vaultActionUrl ReadMetadata _VaultConnection_VaultAddress mountedPath searchPath
     rspObj <- vaultRequestJSON _VaultConnection_Manager "GET" path headers (Nothing :: Maybe ()) [200]
     case parseEither parseJSON (Object rspObj) of
         Left err -> throwIO $ VaultException_ParseBodyError "GET" path (encode rspObj) err
@@ -570,8 +603,9 @@ vaultRead VaultConnection{_VaultConnection_VaultAddress, _VaultConnection_Manage
 
 -- | <https://www.vaultproject.io/docs/secrets/generic/index.html>
 vaultDelete :: VaultConnection -> VaultSecretPath -> IO ()
-vaultDelete VaultConnection{_VaultConnection_VaultAddress, _VaultConnection_Manager, _VaultConnection_AuthToken} (VaultSecretPath location) = do
-    _ <- vaultRequest _VaultConnection_Manager "DELETE" (vaultUrl _VaultConnection_VaultAddress "/" ++ T.unpack location) headers (Nothing :: Maybe ()) [204]
+vaultDelete VaultConnection{_VaultConnection_VaultAddress, _VaultConnection_Manager, _VaultConnection_AuthToken} (VaultSecretPath (mountedPath, searchPath)) = do
+    let path = vaultActionUrl DeleteMetadata _VaultConnection_VaultAddress mountedPath searchPath
+    _ <- vaultRequest _VaultConnection_Manager "DELETE" path headers (Nothing :: Maybe ()) [204]
     pure ()
     where
     headers = [authTokenHeader _VaultConnection_AuthToken]
@@ -598,23 +632,26 @@ instance FromJSON VaultListResult where
 --
 -- To recursively retrieve all of the secrets use 'vaultListRecursive'
 vaultList :: VaultConnection -> VaultSecretPath -> IO [VaultSecretPath]
-vaultList VaultConnection{_VaultConnection_VaultAddress, _VaultConnection_Manager, _VaultConnection_AuthToken} (VaultSecretPath location) = do
-    VaultListResult keys <- vaultRequestJSON _VaultConnection_Manager "LIST" (vaultUrl _VaultConnection_VaultAddress "/" ++ T.unpack location) headers (Nothing :: Maybe ()) [200]
-    pure $ map (VaultSecretPath . (withTrailingSlash `T.append`)) keys
+vaultList VaultConnection{_VaultConnection_VaultAddress, _VaultConnection_Manager, _VaultConnection_AuthToken} (VaultSecretPath (VaultMountedPath mountedPath, VaultSearchPath searchPath)) = do
+    let path = vaultActionUrl ListSecrets _VaultConnection_VaultAddress (VaultMountedPath mountedPath) (VaultSearchPath searchPath)
+    VaultListResult keys <- vaultRequestJSON _VaultConnection_Manager "LIST" path headers (Nothing :: Maybe ()) [200]
+    pure $ map (VaultSecretPath . fullSecretPath) keys
     where
     headers = [authTokenHeader _VaultConnection_AuthToken]
+    fullSecretPath key = (VaultMountedPath mountedPath, VaultSearchPath (withTrailingSlash `T.append` key))
     withTrailingSlash
-        | T.null location = "/"
-        | T.last location == '/' = location
-        | otherwise = location `T.snoc` '/'
+        | T.null searchPath = "/"
+        | T.last searchPath == '/' = searchPath
+        | otherwise = searchPath `T.snoc` '/'
+
 
 -- | Does the path end with a '/' character?
 --
 -- Meant to be used on the results of 'vaultList'
 isFolder :: VaultSecretPath -> Bool
-isFolder (VaultSecretPath path)
-    | T.null path = False
-    | otherwise = T.last path == '/'
+isFolder (VaultSecretPath (_, VaultSearchPath searchPath))
+    | T.null searchPath = False
+    | otherwise = T.last searchPath == '/'
 
 -- | Recursively calls 'vaultList' to retrieve all of the secrets in a folder
 -- (including all subfolders and sub-subfolders, etc...)

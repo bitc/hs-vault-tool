@@ -22,7 +22,13 @@ instance FromJSON VaultAuthToken where
         text <- parseJSON j
         pure (VaultAuthToken text)
 
-newtype VaultSecretPath = VaultSecretPath { unVaultSecretPath :: Text }
+newtype VaultMountedPath = VaultMountedPath { unVaultMountedPath :: Text }
+    deriving (Show, Eq, Ord)
+
+newtype VaultSearchPath = VaultSearchPath { unVaultSearchPath :: Text }
+    deriving (Show, Eq, Ord)
+
+newtype VaultSecretPath = VaultSecretPath (VaultMountedPath, VaultSearchPath)
     deriving (Show, Eq, Ord)
 
 newtype VaultAppRoleId = VaultAppRoleId { unVaultAppRoleId :: Text }
