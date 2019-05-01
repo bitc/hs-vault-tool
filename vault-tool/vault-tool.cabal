@@ -1,5 +1,5 @@
 name:                vault-tool
-version:             0.1.0.0
+version:             0.1.0.1
 synopsis:            Client library for HashiCorp's Vault tool (via HTTP API)
 description:         Client library for HashiCorp's Vault tool (via HTTP API)
 license:             MIT
