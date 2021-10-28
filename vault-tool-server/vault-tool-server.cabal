@@ -41,9 +41,10 @@ test-suite test
   hs-source-dirs:      test
   main-is:             test.hs
 
-  build-depends:       base >=4.8 && <4.11,
+  build-depends:       base >=4.8 && <5,
                        vault-tool >=0.1.0.1,
                        vault-tool-server,
                        aeson,
                        tasty-hunit,
-                       temporary
+                       temporary,
+                       text

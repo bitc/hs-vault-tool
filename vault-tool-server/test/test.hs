@@ -6,21 +6,25 @@ module Main where
 
 import Data.Aeson
 import Data.List (sort)
+import Data.Text (Text)
 import GHC.Generics
 import System.Environment
 import System.IO.Temp (withSystemTempDirectory)
 import Test.Tasty.HUnit
 
 import Network.VaultTool
+import Network.VaultTool.KeyValueV2
 import Network.VaultTool.VaultServerProcess
 
 withTempVaultBackend :: (VaultBackendConfig -> IO a) -> IO a
 withTempVaultBackend action = withSystemTempDirectory "hs_vault" $ \tmpDir -> do
-    let backendConfig = object
-            [ "file" .= object
-                [ "path" .= tmpDir
+    let backendConfig =
+            object
+                [ "file"
+                    .= object
+                        [ "path" .= tmpDir
+                        ]
                 ]
-            ]
     action backendConfig
 
 main :: IO ()
@@ -37,10 +41,11 @@ main = withTempVaultBackend $ \vaultBackendConfig -> do
 
     putStrLn "Ok"
 
--- | The vault must be a newly created, non-initialized vault
---
--- TODO It would be better to break this into lots of individual unit tests
--- instead of this one big-ass test
+{- | The vault must be a newly created, non-initialized vault
+
+ TODO It would be better to break this into lots of individual unit tests
+ instead of this one big-ass test
+-}
 talkToVault :: VaultAddress -> IO ()
 talkToVault addr = do
     health <- vaultHealth addr
@@ -51,46 +56,66 @@ talkToVault addr = do
     length unsealKeys @?= 4
 
     status0 <- vaultSealStatus addr
-    status0 @?= VaultSealStatus
-        { _VaultSealStatus_Sealed = True
-        , _VaultSealStatus_T = 2
-        , _VaultSealStatus_N = 4
-        , _VaultSealStatus_Progress = 0
-        }
+    status0
+        @?= VaultSealStatus
+            { _VaultSealStatus_Sealed = True
+            , _VaultSealStatus_T = 2
+            , _VaultSealStatus_N = 4
+            , _VaultSealStatus_Progress = 0
+            }
 
     status1 <- vaultUnseal addr (VaultUnseal_Key (unsealKeys !! 0))
-    status1 @?= VaultSealStatus
-        { _VaultSealStatus_Sealed = True
-        , _VaultSealStatus_T = 2
-        , _VaultSealStatus_N = 4
-        , _VaultSealStatus_Progress = 1
-        }
+    status1
+        @?= VaultSealStatus
+            { _VaultSealStatus_Sealed = True
+            , _VaultSealStatus_T = 2
+            , _VaultSealStatus_N = 4
+            , _VaultSealStatus_Progress = 1
+            }
 
     status2 <- vaultUnseal addr VaultUnseal_Reset
-    status2 @?= VaultSealStatus
-        { _VaultSealStatus_Sealed = True
-        , _VaultSealStatus_T = 2
-        , _VaultSealStatus_N = 4
-        , _VaultSealStatus_Progress = 0
-        }
+    status2
+        @?= VaultSealStatus
+            { _VaultSealStatus_Sealed = True
+            , _VaultSealStatus_T = 2
+            , _VaultSealStatus_N = 4
+            , _VaultSealStatus_Progress = 0
+            }
 
     status3 <- vaultUnseal addr (VaultUnseal_Key (unsealKeys !! 1))
-    status3 @?= VaultSealStatus
-        { _VaultSealStatus_Sealed = True
-        , _VaultSealStatus_T = 2
-        , _VaultSealStatus_N = 4
-        , _VaultSealStatus_Progress = 1
-        }
+    status3
+        @?= VaultSealStatus
+            { _VaultSealStatus_Sealed = True
+            , _VaultSealStatus_T = 2
+            , _VaultSealStatus_N = 4
+            , _VaultSealStatus_Progress = 1
+            }
 
     status4 <- vaultUnseal addr (VaultUnseal_Key (unsealKeys !! 2))
-    status4 @?= VaultSealStatus
-        { _VaultSealStatus_Sealed = False
-        , _VaultSealStatus_T = 2
-        , _VaultSealStatus_N = 4
-        , _VaultSealStatus_Progress = 0
-        }
+    status4
+        @?= VaultSealStatus
+            { _VaultSealStatus_Sealed = False
+            , _VaultSealStatus_T = 2
+            , _VaultSealStatus_N = 4
+            , _VaultSealStatus_Progress = 0
+            }
 
     conn <- connectToVault addr rootToken
+
+    vaultNewMount
+        conn
+        "secret"
+        VaultMount
+            { _VaultMount_Type = "kv"
+            , _VaultMount_Description = Just "key/value secret storage"
+            , _VaultMount_Config = Nothing
+            , _VaultMount_Options =
+                Just
+                    VaultMountOptions
+                        { _VaultMountOptions_Version = Just 2
+                        }
+            }
+
     allMounts <- vaultMounts conn
 
     fmap _VaultMount_Type (lookup "cubbyhole/" allMounts) @?= Just "cubbyhole"
@@ -101,14 +126,20 @@ talkToVault addr = do
     _ <- vaultMountTune conn "secret"
     _ <- vaultMountTune conn "sys"
 
-    vaultNewMount conn "mymount" VaultMount
-        { _VaultMount_Type = "generic"
-        , _VaultMount_Description = Just "blah blah blah"
-        , _VaultMount_Config = Just VaultMountConfig
-            { _VaultMountConfig_DefaultLeaseTtl = Just 42
-            , _VaultMountConfig_MaxLeaseTtl = Nothing
+    vaultNewMount
+        conn
+        "mymount"
+        VaultMount
+            { _VaultMount_Type = "generic"
+            , _VaultMount_Description = Just "blah blah blah"
+            , _VaultMount_Config =
+                Just
+                    VaultMountConfig
+                        { _VaultMountConfig_DefaultLeaseTtl = Just 42
+                        , _VaultMountConfig_MaxLeaseTtl = Nothing
+                        }
+            , _VaultMount_Options = Nothing
             }
-        }
 
     mounts2 <- vaultMounts conn
     fmap _VaultMount_Description (lookup "mymount/" mounts2) @?= Just "blah blah blah"
@@ -116,10 +147,13 @@ talkToVault addr = do
     t <- vaultMountTune conn "mymount"
     _VaultMountConfig_DefaultLeaseTtl t @?= 42
 
-    vaultMountSetTune conn "mymount" VaultMountConfig
-        { _VaultMountConfig_DefaultLeaseTtl = Just 52
-        , _VaultMountConfig_MaxLeaseTtl = Nothing
-        }
+    vaultMountSetTune
+        conn
+        "mymount"
+        VaultMountConfig
+            { _VaultMountConfig_DefaultLeaseTtl = Just 52
+            , _VaultMountConfig_MaxLeaseTtl = Nothing
+            }
 
     t2 <- vaultMountTune conn "mymount"
     _VaultMountConfig_DefaultLeaseTtl t2 @?= 52
@@ -129,69 +163,81 @@ talkToVault addr = do
     mounts3 <- vaultMounts conn
     lookup "mymount/" mounts3 @?= Nothing
 
-    vaultWrite conn (VaultSecretPath "secret/big") (object ["A" .= 'a', "B" .= 'b'])
+    let pathBig = mkVaultSecretPath "big"
+    vaultWrite conn pathBig (object ["A" .= 'a', "B" .= 'b'])
 
-    (_, r) <- vaultRead conn (VaultSecretPath "secret/big")
+    (_, r) <- vaultRead conn pathBig
     case r of
         Left err -> assertFailure $ "Failed to parse secret/big: " ++ (show err)
-        Right x -> x @?= object ["A" .= 'a', "B" .= 'b']
+        Right x -> vsvData x @?= object ["A" .= 'a', "B" .= 'b']
 
-    vaultWrite conn (VaultSecretPath "secret/fun") (FunStuff "fun" [1, 2, 3])
-    (_, r2) <- vaultRead conn (VaultSecretPath "secret/fun")
+    let pathFun = mkVaultSecretPath "fun"
+    vaultWrite conn pathFun (FunStuff "fun" [1, 2, 3])
+    (_, r2) <- vaultRead conn pathFun
     case r2 of
-        Left err -> assertFailure $ "Failed to parse secret/big: " ++ (show err)
-        Right x -> x @?= (FunStuff "fun" [1, 2, 3])
+        Left err -> assertFailure $ "Failed to parse secret/fun: " ++ (show err)
+        Right x -> vsvData x @?= (FunStuff "fun" [1, 2, 3])
 
-    (_, r3) <- vaultRead conn (VaultSecretPath "secret/big")
+    (_, r3) <- vaultRead conn pathBig
     case r3 of
-        Left (v, _) -> v @?= object ["A" .= 'a', "B" .= 'b']
-        Right (x :: FunStuff) -> assertFailure $ "Somehow parsed an impossible value" ++ show x
+        Left (v, _) -> vsvData <$> fromJSON v @?= Success (object ["A" .= 'a', "B" .= 'b'])
+        Right (x :: VaultSecretVersion FunStuff) -> assertFailure $ "Somehow parsed an impossible value" ++ show x
 
-    vaultWrite conn (VaultSecretPath "secret/foo/bar/a") (object ["X" .= 'x'])
-    vaultWrite conn (VaultSecretPath "secret/foo/bar/b") (object ["X" .= 'x'])
-    vaultWrite conn (VaultSecretPath "secret/foo/bar/a/b/c/d/e/f/g") (object ["X" .= 'x'])
-    vaultWrite conn (VaultSecretPath "secret/foo/quack/duck") (object ["X" .= 'x'])
+    let pathFooBarA = mkVaultSecretPath "foo/bar/a"
+        pathFooBarB = mkVaultSecretPath "foo/bar/b"
+        pathFooBarABCDEFG = mkVaultSecretPath "foo/bar/a/b/c/d/e/f/g"
+        pathFooQuackDuck = mkVaultSecretPath "foo/quack/duck"
 
-    keys <- vaultList conn (VaultSecretPath "secret/")
-    assertBool "Secret in list" $ VaultSecretPath "secret/big" `elem` keys
-    vaultDelete conn (VaultSecretPath "secret/big")
+    vaultWrite conn pathFooBarA (object ["X" .= 'x'])
+    vaultWrite conn pathFooBarB (object ["X" .= 'x'])
+    vaultWrite conn pathFooBarABCDEFG (object ["X" .= 'x'])
+    vaultWrite conn pathFooQuackDuck (object ["X" .= 'x'])
 
-    keys2 <- vaultList conn (VaultSecretPath "secret")
-    assertBool "Secret not in list" $ not (VaultSecretPath "secret/big" `elem` keys2)
+    let emptySecretPath = mkVaultSecretPath ""
+    keys <- vaultList conn emptySecretPath
+    assertBool "Secret in list" $ pathBig `elem` keys
+    vaultDelete conn pathBig
 
-    keys3 <- vaultListRecursive conn (VaultSecretPath "secret/foo/")
-    sort keys3 @?= sort
-        [ VaultSecretPath "secret/foo/bar/a"
-        , VaultSecretPath "secret/foo/bar/b"
-        , VaultSecretPath "secret/foo/bar/a/b/c/d/e/f/g"
-        , VaultSecretPath "secret/foo/quack/duck"
-        ]
+    keys2 <- vaultList conn emptySecretPath
+    assertBool "Secret not in list" $ not (pathBig `elem` keys2)
+
+    keys3 <- vaultListRecursive conn (mkVaultSecretPath "foo")
+    sort keys3
+        @?= sort
+            [ pathFooBarA
+            , pathFooBarB
+            , pathFooBarABCDEFG
+            , pathFooQuackDuck
+            ]
 
     vaultAuthEnable conn "approle"
 
-    vaultWrite conn (VaultSecretPath "secret/small") (object ["X" .= 'x'])
+    let pathSmall = mkVaultSecretPath "small"
+    vaultWrite conn pathSmall (object ["X" .= 'x'])
 
     vaultPolicyCreate conn "foo" "path \"secret/small\" { capabilities = [\"read\"] }"
-    vaultAppRoleCreate conn "foo-role" defaultVaultAppRoleParameters{_VaultAppRoleParameters_Policies=["foo"]}
+
+    vaultAppRoleCreate conn "foo-role" defaultVaultAppRoleParameters{_VaultAppRoleParameters_Policies = ["foo"]}
 
     roleId <- vaultAppRoleRoleIdRead conn "foo-role"
     secretId <- _VaultAppRoleSecretIdGenerateResponse_SecretId <$> vaultAppRoleSecretIdGenerate conn "foo-role" ""
 
     arConn <- connectToVaultAppRole addr roleId secretId
-    (_, ar1) <- vaultRead conn (VaultSecretPath "secret/small")
+    (_, ar1) <- vaultRead conn pathSmall
     case ar1 of
-      Left (v, _) -> v @?= object ["X" .= 'x']
-      Right (x :: FunStuff) -> assertFailure $ "Somehow parsed an impossible value" ++ show x
+        Left (v, _) -> vsvData <$> fromJSON v @?= Success (object ["X" .= 'x'])
+        Right (x :: VaultSecretVersion FunStuff) -> assertFailure $ "Somehow parsed an impossible value" ++ show x
 
     vaultSeal conn
 
     status5 <- vaultSealStatus addr
-    status5 @?= VaultSealStatus
-        { _VaultSealStatus_Sealed = True
-        , _VaultSealStatus_T = 2
-        , _VaultSealStatus_N = 4
-        , _VaultSealStatus_Progress = 0
-        }
+    status5
+        @?= VaultSealStatus
+            { _VaultSealStatus_Sealed = True
+            , _VaultSealStatus_T = 2
+            , _VaultSealStatus_N = 4
+            , _VaultSealStatus_Progress = 0
+            }
 
     health2 <- vaultHealth addr
     _VaultHealth_Initialized health2 @?= True
@@ -205,3 +251,6 @@ data FunStuff = FunStuff
 
 instance FromJSON FunStuff
 instance ToJSON FunStuff
+
+mkVaultSecretPath :: Text -> VaultSecretPath
+mkVaultSecretPath searchPath = VaultSecretPath (VaultMountedPath "secret", VaultSearchPath searchPath)
